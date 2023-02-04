@@ -2,10 +2,13 @@
 Proyecto final para el diplomado en Data Science de la PUC
 
  
+
+
+ 
  
  
   
-  Contexto
+  Contexto:
 
 
   
@@ -33,7 +36,7 @@ Proyecto final para el diplomado en Data Science de la PUC
  
  
   
-  Problema
+  Problema:
 
 
   
@@ -47,7 +50,7 @@ Proyecto final para el diplomado en Data Science de la PUC
  
   
   Preguntas
-  a resolver
+  a resolver:
 
 
   
@@ -60,6 +63,12 @@ Proyecto final para el diplomado en Data Science de la PUC
   universitarias elegidas por los y las estudiantes al realizar la postulación
   a la educación superior?
 
+  
+ 
+
+ 
+ 
+  
   
  
 
