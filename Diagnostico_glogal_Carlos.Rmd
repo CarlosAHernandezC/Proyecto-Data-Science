@@ -1,0 +1,105 @@
+---
+title: "Ajuste k-Modes"
+author: "Diagnóstico global - CH"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  prettydoc::html_pretty:
+    theme: hpstr
+    highlight: github
+header-includes:
+  - \usepackage{color}
+  - \usepackage{amsmath}
+---
+
+## Carga de librerías:
+```{r message=FALSE, warning=FALSE, eval=TRUE, echo=TRUE}
+require(dplyr)
+require(ggplot2)
+require(caret)
+library(cluster) 
+library(factoextra)
+library(ggplot2)
+library(tidyverse)
+require(clustMixType)
+require(caret)
+library(readxl)
+require(klaR)
+library(gridExtra)
+```
+
+
+## Carga de la data:
+```{r}
+base <- read.csv('union_preferencia_1.csv')
+base <- base %>% 
+  dplyr::select(-X)
+```
+
+## Revision data:
+### Base: base (union_preferencia_1):  
+```{r}
+glimpse(base)
+apply(is.na(base),2,sum)
+summary(base)
+```
+
+### Guardamos en un objeto las comunas y carreras (debemos sacar los NA si lo utilizamos):
+```{r}
+pref <- base %>% 
+  dplyr::select(comuna_sede, nombre_carrera,
+         ptje_ponderado_01) %>%
+  mutate(comuna_sede = factor(comuna_sede),
+         nombre_carrera = factor(nombre_carrera))
+pref <- as.data.frame(pref)
+```
+
+### Generamos la base para el diagnóstico inicial:
+```{r}
+pref1 <- base %>% 
+  dplyr::select(-id_rut, -cod_pond_utilizada_01, -cod_carrera_pref_01, -comuna_sede, -nombre_sede, 
+         -cod_est_postulacion_01, -postulaciones_bea, -nombre_carrera, -nombre_ies,
+         -ptje_ponderado_01) %>%
+  mutate(anio_proceso = factor(anio_proceso),
+         region_sede = factor(region_sede),
+         area_del_conocimiento = factor(area_del_conocimiento),
+         tipo_institucion_2 = factor(tipo_institucion_2))
+pref1 <- as.data.frame(pref1)
+```
+
+
+```{r}
+head(pref1)  
+glimpse(pref1)
+summary(pref1)
+apply(is.na(pref1),2,sum) # contamos cuantos NA tenemos por columna: 2626
+pref1 <- na.omit(pref1) # eliminamos los registros con NA
+```
+
+## Ajuste a K-Modes
+
+### Buscamos el k optimo con el método del codo:
+```{r, eval=FALSE}
+tw <- c()
+
+set.seed(2022)
+for(k in 1:20){
+  model <- kmodes(data = pref1_2, modes = k)
+  tw[k] <- model$withindiff
+}
+
+ggplot(data = data.frame(k = c(1:20), TW = tw), aes(x = k, y = TW)) +
+  geom_line(color = 'blue') + 
+  geom_point(color = 'blue') + 
+  theme_bw() +
+  xlab('k') +
+  ylab('Total Within SS')
+```
+
+
+
+
+
+
+
+
+

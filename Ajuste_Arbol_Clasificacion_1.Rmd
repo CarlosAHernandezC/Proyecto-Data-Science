@@ -1,0 +1,202 @@
+---
+title: "Ajuste k-Modes"
+author: "Conclusiones K-Modes / Ajuste Árbol Clasificación - CH"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  prettydoc::html_pretty:
+    theme: hpstr
+    highlight: github
+header-includes:
+  - \usepackage{color}
+  - \usepackage{amsmath}
+---
+## Conclusiones ajuste K-Modes:
+* Considerando que la variable anio_proceso corresponde al año del proceso de admisión a Instituciones de Educación Superior en el que se encuentra el estudiante, determinamos que los años que corresponden a la Pandemia son el 2021 y 2022.
+* Considerando lo anterior y el número de postulaciones en ambos clústers denominaremos como "Clúster Pandemia" al clúster 2 y como "Clúster Pre-Pandemia" al clúster 1.
+* Realizaremos un análisis predictivo en el Clúster Pandemia.
+* Ajustaremos un Árbol de Clasificación al Clúster Pandemia con el objetivo de determinar si un alumno opta en primera preferencia por alguna universidad CRUCH o privada, considerando el área del conocimiento a la cual pertenece su opción de carrera y la región donde quiere estudiar.
+
+```{r, warning=FALSE, message=FALSE}
+require(dplyr)
+library(cluster) 
+library(factoextra)
+library(tidyverse)
+require(caret)
+require(klaR)
+require(tidymodels)
+require(Metrics)
+require(rpart.plot)
+require(rattle)
+require(rpart)
+require(baguette)
+require(rpart.plot)
+library(gridExtra)
+library(e1071)
+```
+
+### Ajuste Árbol de Clasificación al Clúster Pandemia:
+
+```{r}
+pref1 <- read.csv('pref1.csv')
+pref1 <- pref1 %>% dplyr::select(-X)
+```
+
+```{r}
+Cluster_2 <- subset(pref1, cluster == "2")
+```
+
+Eliminamos variable cluster:
+```{r}
+Cluster_2 <- Cluster_2 %>% 
+  dplyr::select(-cluster)
+```
+
+Verificamos que no hay NA:
+```{r}
+apply(is.na(Cluster_2),2,sum)
+```
+
+Eliminamos la variable año:
+```{r}
+Cluster_2 <- Cluster_2 %>%
+  dplyr::select(-anio_proceso)
+```
+
+Transformamos a variables dummy:
+```{r,warning=FALSE}
+library(fastDummies)
+Cluster_2 <- dummy_cols(Cluster_2, select_columns = c('area_del_conocimiento','region_sede'))
+```
+
+Eliminamos las variables originales:
+```{r}
+Cluster_2 <- Cluster_2 %>% 
+  dplyr::select(-area_del_conocimiento, -region_sede, -comuna_sede, -nombre_carrera)
+```
+
+Revisamos la base:
+```{r}
+glimpse(Cluster_2)
+```
+
+Obtenemos el set de entrenamiento y testeo:
+```{r}
+set.seed(20220901)
+traintest_split <- initial_split(Cluster_2, prop = 0.7, strata = tipo_institucion_2)
+train_set <- training(traintest_split)
+test_set <- testing(traintest_split)
+dim(train_set)
+dim(test_set)
+```
+
+#### Tuneamos:
+
+```{r}
+tuned_model <- decision_tree(cost_complexity = tune(), tree_depth = tune()) %>%
+    set_engine('rpart') %>%
+    set_mode('classification')
+```
+
+```{r}
+tree_grid <- grid_regular(cost_complexity(),
+                          tree_depth(),
+                          levels = 5)
+tree_grid
+```
+
+Utilizamos validación cruzada:
+```{r}
+set.seed(20220901)
+set_folds <- vfold_cv(train_set)
+```
+
+```{r}
+receta <- recipe(tipo_institucion_2 ~ .,data = train_set)
+```
+
+```{r}
+tree_workflow <- workflow() %>%
+    add_model(tuned_model) %>%
+    add_recipe(receta)
+```
+
+```{r}
+tree_tuning <- tree_workflow %>%
+    tune_grid(resamples = set_folds, grid = tree_grid)
+
+tree_tuning
+```
+
+```{r}
+tree_tuning %>% 
+  show_best('roc_auc')
+```
+
+```{r}
+best_tree <- tree_tuning %>% 
+  select_best('roc_auc')
+best_tree
+```
+
+```{r}
+tree_workflow_final <- tree_workflow %>%
+  finalize_workflow(best_tree)
+```
+
+```{r}
+tree_fit_tune <- tree_workflow_final %>%
+  last_fit(traintest_split)
+tree_fit_tune
+```
+```{r}
+tree_fit_tune %>% 
+  collect_metrics() # roc_auc = 0.6632001    accuracy = 0.8346433
+```
+
+El área bajo la curva ROC del Arbol de Clasificación es 0,663 y su acccuracy 83,45%. Estas métricas nos permiten considerar adecuado el ajuste a este modelo para promosticar si un postulante que desea estudiar en un área del conocimiento determinada y en una región específica, postulará a una universidad privada o a una universidad CRUCH.
+
+```{r}
+tree_fit_tune %>%
+    extract_fit_engine() %>%
+    rpart.plot(roundint = FALSE)
+```
+
+
+```{r, eval=FALSE}
+prediccion <- tibble(tipo_institucion_2 = "Universidades Privadas",
+                     `area_del_conocimiento_Administración y Comercio` = "1",
+                     area_del_conocimiento_Agropecuaria = "0",
+                     `area_del_conocimiento_Arte y Arquitectura` = "0",
+                     `area_del_conocimiento_Ciencias Básicas` = "0",
+                     `area_del_conocimiento_Ciencias Sociales` = "0",
+                     area_del_conocimiento_Derecho = "0",
+                     area_del_conocimiento_Educación = "0",
+                     area_del_conocimiento_Humanidades = "0",
+                     area_del_conocimiento_Salud = "0",
+                     area_del_conocimiento_Tecnología = "0",
+                     `region_sede_REGION DE ANTOFAGASTA` = "0",
+                     `region_sede_REGION DE ARICA Y PARINACOTA` = "0",
+                     `region_sede_REGION DE ATACAMA` = "0",
+                     `region_sede_REGION DE AYSEN DEL GENERAL CARLOS IBAÑEZ DEL CAMPO` = "0",
+                     `region_sede_REGION DE COQUIMBO` = "0",
+                     `region_sede_REGION DE LA ARAUCANIA` = "0",
+                     `region_sede_REGION DE LOS LAGOS` = "0",
+                     `region_sede_REGION DE LOS RIOS` = "0",
+                     `region_sede_REGION DE MAGALLANES Y DE LA ANTARTICA CHILENA` = "0",
+                     `region_sede_REGION DE ÑUBLE` = "0",
+                     `region_sede_REGION DE TARAPACA` = "0",
+                     `region_sede_REGION DE VALPARAISO` = "0",
+                     `region_sede_REGION DEL BIOBIO` = "0",
+                     `region_sede_REGION DEL LIBERTADOR BERNARDO OHIGGINS` = "0",
+                     `region_sede_REGION DEL MAULE` = "0",
+                     `region_sede_REGION METROPOLITANA` = "1")
+prediccion
+```
+
+
+
+
+
+
+
+

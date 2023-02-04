@@ -1,0 +1,169 @@
+---
+title: "3-Arbol-Santiago_Cluster2"
+author: "Conclusiones K-Modes / Ajuste Árbol Clasificación - CH"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  prettydoc::html_pretty:
+    theme: hpstr
+    highlight: github
+header-includes:
+  - \usepackage{color}
+  - \usepackage{amsmath}
+---
+## Conclusiones ajuste K-Modes / Árbol de decisión:
+* De igual forma como utilizando un Árbol de Clasificación determinamos si un postulante a un área del conocimiento y región determinada tendrá como primera preferencia una universidad privada o CRUCH, podemos pronosticar, por ejemplo, si un alumno postulará a alguna universidad de la ciudad de Santiago considerando el área de conocimiento de su interés, región donde le gustaría estudiar y si su opción es una universidad CRUCH o particular.
+
+```{r, message=FALSE, warning=FALSE}
+require(dplyr)
+library(cluster) 
+library(factoextra)
+library(tidyverse)
+require(caret)
+require(klaR)
+require(tidymodels)
+require(Metrics)
+require(rpart.plot)
+require(rattle)
+require(rpart)
+require(baguette)
+require(rpart.plot)
+library(gridExtra)
+library(e1071)
+```
+
+### Preparación de la data:
+Separamos el clúster 2:
+```{r}
+union_preferencia_1 <- read.csv('union_preferencia_1.csv')
+pref1 <- union_preferencia_1
+apply(is.na(pref1),2,sum)
+pref1 <- pref1 %>% 
+  dplyr::select(-id_rut, -cod_pond_utilizada_01, -cod_carrera_pref_01, -nombre_sede, 
+         -cod_est_postulacion_01, -postulaciones_bea, -nombre_carrera, -nombre_ies,
+         -ptje_ponderado_01, -X) %>%
+  mutate(anio_proceso = factor(anio_proceso),
+         region_sede = factor(region_sede),
+         area_del_conocimiento = factor(area_del_conocimiento),
+         tipo_institucion_2 = factor(tipo_institucion_2),
+         comuna_sede = factor(comuna_sede))
+pref1 <- as.data.frame(pref1)
+
+apply(is.na(pref1),2,sum)  
+pref1 <- na.omit(pref1)
+
+grupos <- read.csv('pref1.csv')
+pref1$cluster <- grupos$cluster
+```
+
+Separamos la región del Valparíso y el clúster 2:
+```{r}
+A1 <- subset(pref1, cluster == "2") 
+```
+
+Transformamos a variables dummy y eliminamos variables innecesarias:
+```{r,warning=FALSE}
+library(fastDummies)
+A1 <- dummy_cols(A1, select_columns = c('area_del_conocimiento', 'comuna_sede', 'region_sede', 'tipo_institucion_2'))  
+A1 <- A1 %>% 
+  dplyr::select(-anio_proceso, -region_sede, -comuna_sede, -area_del_conocimiento, -tipo_institucion_2, -cluster,
+         -comuna_sede_ANTOFAGASTA, -comuna_sede_ARICA,
+         -comuna_sede_CASTRO, -comuna_sede_CHILLAN, -comuna_sede_CONCEPCION, -comuna_sede_COPIAPO,
+         -comuna_sede_COQUIMBO, -comuna_sede_COYHAIQUE, -`comuna_sede_ESTACION CENTRAL`, -comuna_sede_HUALPEN,
+         -comuna_sede_HUECHURABA, -comuna_sede_IQUIQUE, -`comuna_sede_LA FLORIDA`, -`comuna_sede_LA SERENA`,
+         -`comuna_sede_LAS CONDES`, -comuna_sede_LINARES, -`comuna_sede_LOS ANGELES`, -comuna_sede_MACUL,
+         -comuna_sede_MAIPU, -comuna_sede_ÑUÑOA, -comuna_sede_OSORNO, -comuna_sede_OVALLE, -comuna_sede_PEÑALOLEN,
+         -comuna_sede_PROVIDENCIA, -`comuna_sede_PUERTO MONTT`, -`comuna_sede_PUNTA ARENAS`, -comuna_sede_RANCAGUA,
+         -`comuna_sede_SAN FELIPE`, -`comuna_sede_SAN FERNANDO`, -`comuna_sede_SAN JOAQUIN`,
+         -`comuna_sede_SAN MIGUEL`, -`comuna_sede_SANTA CRUZ`,
+         -comuna_sede_TALCAHUANO, -comuna_sede_TEMUCO, -comuna_sede_VALDIVIA, -comuna_sede_VALLENAR, 
+         -comuna_sede_VICTORIA, -comuna_sede_VILLARRICA, -comuna_sede_VALPARAISO,
+         -comuna_sede_VITACURA, -comuna_sede_TALCA, -comuna_sede_CURICO, -`comuna_sede_VIÑA DEL MAR`,
+         -`tipo_institucion_2_Universidades Privadas`) %>% 
+  mutate(comuna_sede_SANTIAGO = factor(comuna_sede_SANTIAGO))
+glimpse(A1)
+```
+
+Obtenemos set de entrenamiento y testeo:
+```{r}
+set.seed(20220901)
+traintest_split <- initial_split(A1, prop = 0.7, strata = NULL)
+train_set <- training(traintest_split)
+test_set <- testing(traintest_split)
+dim(train_set) 
+```
+
+Tuneamos:
+```{r}
+tuned_model2 <- decision_tree(cost_complexity = tune(), tree_depth = tune()) %>%
+    set_engine('rpart') %>%
+    set_mode('classification')
+```
+```{r}
+tree_grid2 <- grid_regular(cost_complexity(),
+                          tree_depth(),
+                          levels = 5)
+```
+
+Validación cruzada:
+```{r}
+set.seed(20220901)
+set_folds <- vfold_cv(train_set)
+```
+
+Receta:
+```{r}
+receta2 <- recipe(comuna_sede_SANTIAGO ~ .,data = train_set)
+```
+
+Flujo:
+```{r}
+tree_workflow2 <- workflow() %>%
+    add_model(tuned_model2) %>%
+    add_recipe(receta2)
+```
+
+Arbol tuneado:
+```{r}
+tree_tuning2 <- tree_workflow2 %>%
+    tune_grid(resamples = set_folds, grid = tree_grid2)
+```
+```{r}
+tree_tuning2
+```
+
+```{r}
+tree_tuning2 %>% 
+  show_best('roc_auc')
+```
+
+```{r}
+best_tree2 <- tree_tuning2 %>% 
+  select_best('roc_auc')
+best_tree2
+```
+
+```{r}
+tree_workflow_final2 <- tree_workflow2 %>%
+  finalize_workflow(best_tree2)
+```
+
+```{r}
+tree_fit_tune2 <- tree_workflow_final2 %>%
+  last_fit(traintest_split)
+tree_fit_tune2
+```
+
+```{r}
+tree_fit_tune2 %>% 
+  collect_metrics() # roc_auc = 0.8346148   accuracy = 0.7510201
+```
+
+```{r}
+tree_fit_tune2 %>%
+    extract_fit_engine() %>%
+    rpart.plot(roundint = FALSE)
+```
+
+Considerando el roc_auc como criterio podemos asumir que el ajuste realizado es bastante aceptable, ya que su valor es 0,8346148. Lo anterior nos permite aceptar este modelo como una herramienta que podría ser utilizada, por ejemplo, para estimar el mercado potencial de estudiantes universitarios de primer año en alguna ciudad, dadas algunas de sus preferencia, como en este caso la región donde le gustaría estudiar, el área del concimiento de su carrera y si optaría por una universidad privada o CRUCH. Todo lo anterior enmarcado en el contexto de la pandemia, o alguna situación que determine condiciones similares (restricción a la movilidad, conflictos sociales, insertidumbre generalizada, etc.)
+
+

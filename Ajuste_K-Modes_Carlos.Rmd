@@ -1,0 +1,275 @@
+---
+title: "Ajuste k-Modes"
+author: "Ajuste K-Modes - 2 centroides - CH"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  prettydoc::html_pretty:
+    theme: hpstr
+    highlight: github
+header-includes:
+  - \usepackage{color}
+  - \usepackage{amsmath}
+---
+## Carga de librerías:
+```{r message=FALSE, warning=FALSE, eval=TRUE, echo=TRUE}
+require(dplyr)
+require(ggplot2)
+require(caret)
+library(cluster) 
+library(factoextra)
+library(ggplot2)
+library(tidyverse)
+require(clustMixType)
+require(caret)
+library(readxl)
+require(klaR)
+library(gridExtra)
+```
+
+#### Podemos considerar k = 2
+
+### Ajustamos con K = 2:
+```{r, eval=FALSE}
+base <- read.csv('union_preferencia_1.csv')
+base <- base %>% 
+  dplyr::select(-X)
+
+pref1 <- base %>% 
+  dplyr::select(-id_rut, -cod_pond_utilizada_01, -cod_carrera_pref_01, -comuna_sede, -nombre_sede, 
+         -cod_est_postulacion_01, -postulaciones_bea, -nombre_carrera, -nombre_ies,
+         -ptje_ponderado_01) %>%
+  mutate(anio_proceso = factor(anio_proceso),
+         region_sede = factor(region_sede),
+         area_del_conocimiento = factor(area_del_conocimiento),
+         tipo_institucion_2 = factor(tipo_institucion_2))
+pref1 <- as.data.frame(pref1)
+pref1 <- na.omit(pref1) # eliminamos los registros con NA
+
+set.seed(2022)
+km2_modelo <- kmodes(data = pref1, modes = 2)
+km2_modelo$size # se revisan los tamanos de los cluster (no hay grandes diferencias)
+head(km2_modelo$modes) # se revisan los centroides (modas)
+
+pref1$cluster <- km2_modelo$cluster # agregamos la variable con el cluster
+```
+
+## Creacion data frame por cada variable y su frecuencia:
+
+### tipo_institucion_2:
+```{r}
+
+institucion_C1 <- as.data.frame(pref1 %>% 
+                filter(cluster == 1) %>%                  
+                dplyr::select(tipo_institucion_2) %>%     
+                table()) %>% 
+  mutate(Cluster_1 = Freq) %>% 
+  dplyr::select(-Freq)
+
+institucion_C2 <- as.data.frame(pref1 %>% 
+                     filter(cluster == 2) %>%                  
+                     dplyr::select(tipo_institucion_2) %>%     
+                     table()) %>% 
+  mutate(Cluster_2 = Freq) %>% 
+  dplyr::select(-Freq)
+
+institucion <- merge(x = institucion_C1, y = institucion_C2, all = TRUE)
+```
+
+### anio_proceso:
+```{r}
+anio_C1 <- as.data.frame(pref1 %>% 
+                                  filter(cluster == 1) %>%                  
+                                  dplyr::select(anio_proceso) %>%     
+                                  table()) %>% 
+  mutate(Cluster_1 = Freq) %>% 
+  dplyr::select(-Freq)
+
+anio_C2 <- as.data.frame(pref1 %>% 
+                                  filter(cluster == 2) %>%                  
+                                  dplyr::select(anio_proceso) %>%     
+                                  table()) %>% 
+  mutate(Cluster_2 = Freq) %>% 
+  dplyr::select(-Freq)
+
+anio <-  merge(x = anio_C1, y = anio_C2,  all = TRUE) 
+                                                                       
+```
+
+### region_sede:
+```{r}
+region_C1 <- as.data.frame(pref1 %>% 
+                           filter(cluster == 1) %>%                  
+                           dplyr::select(region_sede) %>%     
+                           table()) %>% 
+  mutate(Cluster_1 = Freq) %>% 
+  dplyr::select(-Freq)
+
+region_C2 <- as.data.frame(pref1 %>% 
+                           filter(cluster == 2) %>%                  
+                           dplyr::select(region_sede) %>%     
+                           table()) %>% 
+  mutate(Cluster_2 = Freq) %>% 
+  dplyr::select(-Freq)
+
+region <- merge(x = region_C1, y = region_C2, all = TRUE)
+                                                                 
+```
+
+### area_del_conocimiento:
+```{r}
+area_C1 <- as.data.frame(pref1 %>% 
+                             filter(cluster == 1) %>%                  
+                             dplyr::select(area_del_conocimiento) %>%     
+                             table()) %>% 
+  mutate(Cluster_1 = Freq) %>% 
+  dplyr::select(-Freq)
+
+area_C2 <- as.data.frame(pref1 %>% 
+                             filter(cluster == 2) %>%                  
+                             dplyr::select(area_del_conocimiento) %>%     
+                             table()) %>% 
+  mutate(Cluster_2 = Freq) %>% 
+  dplyr::select(-Freq)
+
+area <-  merge(x = area_C1, y = area_C2,  all = TRUE) 
+                                                                   
+```
+
+## Resumen de las frecuencias de las 4 variables en cada clúster:
+```{r}
+knitr::kable(institucion, caption = 'Tipo de institución')
+knitr::kable(anio, caption = 'Año del proceso')
+knitr::kable(region, caption = 'Región sede')
+knitr::kable(area, caption = 'Area del conocimiento')
+```
+
+## Gráficos:
+
+### anio_proceso:
+```{r, message=FALSE, warning=FALSE}
+G1 <- ggplot(anio, aes(x = anio_proceso, y = anio$Cluster_1, fill = anio_proceso))+
+  scale_x_discrete(labels = c("2017" = "", "2018" = "", "2019" = "", "2020" = "", "2021" = "", "2022" = ""))+
+  geom_bar(width = 0.9, stat = "identity", position = position_dodge())+
+  labs(x="Año del proceso", y="N° Postulaciones")+
+  labs(fill="")+
+  geom_text(aes(label=anio$Cluster_1), vjust=1.6, color="black",
+            position = position_dodge(0.9), size=3.5)+
+  theme_bw(base_size = 15)+
+  labs(title = "Número de postulaciones Clúster 1")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+G2 <- ggplot(anio, aes(x = anio_proceso, y = anio$Cluster_2, fill = anio_proceso))+
+  scale_x_discrete(labels = c("2017" = "", "2018" = "", "2019" = "", "2020" = "", "2021" = "", "2022" = ""))+
+  geom_bar(width = 0.9, stat = "identity", position = position_dodge())+
+  labs(x="Año del proceso", y="N° Postulaciones")+
+  labs(fill="")+
+  geom_text(aes(label=anio$Cluster_2), vjust=1.6, color="black",
+            position = position_dodge(0.9), size=3.5)+
+  theme_bw(base_size = 15)+
+  labs(title = "Número de postulaciones Clúster 2")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(G1, G2)
+```
+
+### tipo_institucion_2:
+
+```{r, message=FALSE, warning=FALSE}
+H1 <- ggplot(institucion, aes(x = tipo_institucion_2, y = institucion$Cluster_1, fill = tipo_institucion_2))+
+  scale_x_discrete(labels = c("Universidades CRUCH" = "", "Universidades Privadas" = ""))+
+  geom_bar(width = 0.9, stat = "identity", position = position_dodge())+
+  labs(x="Institución", y="N° Postulaciones")+
+  labs(fill="")+
+  geom_text(aes(label=institucion$Cluster_1), vjust=1.6, color="black",
+            position = position_dodge(0.9), size=3.5)+
+  theme_bw(base_size = 15)+
+  labs(title = "Tipo de institución Clúster 1")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+H2 <- ggplot(institucion, aes(x = tipo_institucion_2, y = institucion$Cluster_2, fill = tipo_institucion_2))+
+  scale_x_discrete(labels = c("Universidades CRUCH" = "", "Universidades Privadas" = ""))+
+  geom_bar(width = 0.9, stat = "identity", position = position_dodge())+
+  labs(x="Institución", y="N° Postulaciones")+
+  labs(fill="")+
+  geom_text(aes(label=institucion$Cluster_2), vjust=1.6, color="black",
+            position = position_dodge(0.9), size=3.5)+
+  theme_bw(base_size = 15)+
+  labs(title = "Tipo de institución Clúster 2")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(H1, H2)
+```
+
+### region_sede:
+```{r, message=FALSE, warning=FALSE,eval=FALSE}
+R1 <- ggplot(region, aes(x = region_sede, y = region$Cluster_1, fill = region_sede))+
+  scale_x_discrete(labels = c("REGION DE ANTOFAGASTA" = "", "REGION DE ARICA Y PARINACOTA" = "",
+                              "REGION DE ATACAMA" = "", "REGION DE AYSEN DEL GENERAL CARLOS IBAÑEZ DEL CAMPO" = "",
+                              "REGION DE COQUIMBO" = "", "REGION DE LA ARAUCANIA" = "", "REGION DE LOS LAGOS" = "",
+                              "REGION DE LOS RIOS" = "", "REGION DE MAGALLANES Y DE LA ANTARTICA CHILENA" = "",
+                              "REGION DE ÑUBLE" = "", "REGION DE TARAPACA" = "", "REGION DE VALPARAISO" = "",
+                              "REGION DEL BIOBIO" = "", "REGION DEL LIBERTADOR BERNARDO OHIGGINS" = "",
+                              "REGION DEL MAULE" = "", "REGION METROPOLITANA" = ""))+
+  geom_bar(width = 0.9, stat = "identity", position = position_dodge())+
+  labs(x="Región sede", y="N° Postulaciones")+
+  labs(fill="")+
+  geom_text(aes(label=region$Cluster_1), vjust=1.6, color="black",
+            position = position_dodge(0.9), size=3.5)+
+  theme_bw(base_size = 15)+
+  labs(title = "Región sede Clúster 1")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+R2 <- ggplot(region, aes(x = region_sede, y = region$Cluster_2, fill = region_sede))+
+  scale_x_discrete(labels = c("REGION DE ANTOFAGASTA" = "", "REGION DE ARICA Y PARINACOTA" = "",
+                              "REGION DE ATACAMA" = "", "REGION DE AYSEN DEL GENERAL CARLOS IBAÑEZ DEL CAMPO" = "",
+                              "REGION DE COQUIMBO" = "", "REGION DE LA ARAUCANIA" = "", "REGION DE LOS LAGOS" = "",
+                              "REGION DE LOS RIOS" = "", "REGION DE MAGALLANES Y DE LA ANTARTICA CHILENA" = "",
+                              "REGION DE ÑUBLE" = "", "REGION DE TARAPACA" = "", "REGION DE VALPARAISO" = "",
+                              "REGION DEL BIOBIO" = "", "REGION DEL LIBERTADOR BERNARDO OHIGGINS" = "",
+                              "REGION DEL MAULE" = "", "REGION METROPOLITANA" = ""))+
+  geom_bar(width = 0.9, stat = "identity", position = position_dodge())+
+  labs(x="Región sede", y="N° Postulaciones")+
+  labs(fill="")+
+  geom_text(aes(label=region$Cluster_2), vjust=1.6, color="black",
+            position = position_dodge(0.9), size=3.5)+
+  theme_bw(base_size = 15)+
+  labs(title = "Región sede Clúster 2")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(R1, R2)
+```
+
+### area_del_conocimiento:
+```{r, message=FALSE, warning=FALSE}
+A1 <- ggplot(area, aes(x = area_del_conocimiento, y = area$Cluster_1, fill = area_del_conocimiento))+
+  scale_x_discrete(labels = c("Administración y Comercio" = "", "Agropecuaria" = "",
+                              "Arte y Arquitectura" = "", "Ciencias Básicas" = "",
+                              "Ciencias Sociales" = "", "Derecho" = "", "Educación" = "",
+                              "Humanidades" = "", "Salud" = "",
+                              "Tecnología" = ""))+
+  geom_bar(width = 0.9, stat = "identity", position = position_dodge())+
+  labs(x="Área del conocimiento", y="N° Postulaciones")+
+  labs(fill="")+
+  geom_text(aes(label=area$Cluster_1), vjust=1.6, color="black",
+            position = position_dodge(0.9), size=3.5)+
+  theme_bw(base_size = 15)+
+  labs(title = "Área del conocimiento Clúster 1")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+A2 <- ggplot(area, aes(x = area_del_conocimiento, y = area$Cluster_2, fill = area_del_conocimiento))+
+  scale_x_discrete(labels = c("Administración y Comercio" = "", "Agropecuaria" = "",
+                              "Arte y Arquitectura" = "", "Ciencias Básicas" = "",
+                              "Ciencias Sociales" = "", "Derecho" = "", "Educación" = "",
+                              "Humanidades" = "", "Salud" = "",
+                              "Tecnología" = ""))+
+  geom_bar(width = 0.9, stat = "identity", position = position_dodge())+
+  labs(x="Área del conocimiento", y="N° Postulaciones")+
+  labs(fill="")+
+  geom_text(aes(label=area$Cluster_2), vjust=1.6, color="black",
+            position = position_dodge(0.9), size=3.5)+
+  theme_bw(base_size = 15)+
+  labs(title = "Área del conocimiento Clúster 2")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(A1, A2)
+```
